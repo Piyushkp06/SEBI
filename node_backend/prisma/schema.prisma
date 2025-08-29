@@ -1,0 +1,159 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+//
+// USERS & ADVISORS
+//
+model User {
+  id        String   @id // Supabase user id
+  name      String?
+  email     String   @unique
+  role      Role     @default(INVESTOR)
+  createdAt DateTime @default(now())
+
+  advisor   Advisor?
+  flags     OfferFlag[]
+  auditLogs AuditLog[]
+}
+
+model Advisor {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  licenseId   String
+  regulator   String
+  verified    Boolean  @default(false)
+  verifiedAt  DateTime?
+  user        User     @relation(fields: [userId], references: [id])
+  offers      InvestmentOffer[]
+}
+
+enum Role {
+  INVESTOR
+  ADVISOR
+  REGULATOR
+  ADMIN
+}
+
+/// INVESTMENT OFFERS
+//
+model InvestmentOffer {
+  id          String     @id @default(uuid())
+  platform    String?
+  contentType ContentType
+  contentUrl  String?
+  description String?
+  flagged     Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+
+  advisorId   String?
+  advisor     Advisor?   @relation(fields: [advisorId], references: [id])
+  flags       OfferFlag[]
+}
+
+model OfferFlag {
+  id        String   @id @default(uuid())
+  offerId   String
+  flaggedBy String
+  reason    String?
+  riskScore Int
+  createdAt DateTime @default(now())
+
+  offer     InvestmentOffer @relation(fields: [offerId], references: [id])
+  user      User            @relation(fields: [flaggedBy], references: [id])
+}
+
+enum ContentType {
+  VIDEO
+  AUDIO
+  DOCUMENT
+  TEXT
+  LINK
+}
+
+//
+// SOCIAL MEDIA MONITORING
+//
+model SocialPost {
+  id          String   @id @default(uuid())
+  platform    String
+  author      String?
+  postUrl     String?
+  content     String
+  postedAt    DateTime?
+  suspicious  Boolean  @default(false)
+  links       StockActivityLink[]
+}
+
+model StockActivityLink {
+  id             String   @id @default(uuid())
+  postId         String
+  stockSymbol    String
+  unusualActivity Boolean @default(false)
+  activityDetails Json?
+
+  post           SocialPost @relation(fields: [postId], references: [id])
+}
+
+//
+// CORPORATE ANNOUNCEMENTS
+//
+model CorporateAnnouncement {
+  id             String   @id @default(uuid())
+  companySymbol  String
+  announcementType String
+  content        String
+  source         String
+  announcedAt    DateTime
+  ingestedAt     DateTime @default(now())
+
+  verifications  AnnouncementVerification[]
+  scores         AnnouncementScore[]
+}
+
+model AnnouncementVerification {
+  id              String   @id @default(uuid())
+  announcementId  String
+  verificationType String
+  verified        Boolean
+  details         String?
+  verifiedAt      DateTime @default(now())
+
+  announcement    CorporateAnnouncement @relation(fields: [announcementId], references: [id])
+}
+
+model AnnouncementScore {
+  id              String   @id @default(uuid())
+  announcementId  String
+  credibilityScore Int
+  reason          String?
+  createdAt       DateTime @default(now())
+
+  announcement    CorporateAnnouncement @relation(fields: [announcementId], references: [id])
+}
+
+//
+// AUDIT LOGS
+//
+model AuditLog {
+  id          String   @id @default(uuid())
+  action      String
+  entityType  String
+  entityId    String
+  performedBy String
+  createdAt   DateTime @default(now())
+
+  user        User @relation(fields: [performedBy], references: [id])
+}

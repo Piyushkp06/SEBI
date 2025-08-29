@@ -86,7 +86,7 @@ enum ContentType {
 //
 // SOCIAL MEDIA MONITORING
 //
-model SocialPost {
+model SocialScan {
   id          String   @id @default(uuid())
   platform    String
   author      String?
@@ -94,17 +94,19 @@ model SocialPost {
   content     String
   postedAt    DateTime?
   suspicious  Boolean  @default(false)
+  aiScore     Float?
+  aiVerdict   String?
   links       StockActivityLink[]
 }
 
 model StockActivityLink {
   id             String   @id @default(uuid())
-  postId         String
+  scanId         String
   stockSymbol    String
   unusualActivity Boolean @default(false)
   activityDetails Json?
 
-  post           SocialPost @relation(fields: [postId], references: [id])
+  scan           SocialScan @relation(fields: [scanId], references: [id])
 }
 
 //

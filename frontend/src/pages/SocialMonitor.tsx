@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +21,8 @@ import { Line, Bar } from 'react-chartjs-2';
 const SocialMonitor = () => {
   const [searchTicker, setSearchTicker] = useState('');
   const [selectedTimeframe, setSelectedTimeframe] = useState('24h');
+  const [investigateOpen, setInvestigateOpen] = useState(false);
+  const [investigateTicker, setInvestigateTicker] = useState(null);
 
   // Mock data for social media monitoring
   const flaggedTickers = [
@@ -302,7 +305,14 @@ const SocialMonitor = () => {
                         </div>
                       </div>
                       
-                      <Button variant="outline" size="sm">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setInvestigateTicker(ticker);
+                          setInvestigateOpen(true);
+                        }}
+                      >
                         Investigate
                       </Button>
                     </div>
@@ -422,6 +432,32 @@ const SocialMonitor = () => {
           </TabsContent>
         </Tabs>
       </div>
+      {/* Investigate Modal */}
+      <Dialog open={investigateOpen} onOpenChange={setInvestigateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>AI Investigation</DialogTitle>
+            <DialogDescription>
+              {investigateTicker ? (
+                <>
+                  <div className="mb-2 font-semibold">Stock: {investigateTicker.symbol}</div>
+                  <div className="mb-2">Risk: <span className="font-semibold">{investigateTicker.risk.toUpperCase()}</span></div>
+                  <div className="mb-2">Mentions: {investigateTicker.mentions}</div>
+                  <div className="mb-2">Sentiment: {investigateTicker.sentiment}</div>
+                  <div className="mb-2">Volume: {investigateTicker.volume}</div>
+                  <div className="mb-2">Platforms: {investigateTicker.platforms.join(', ')}</div>
+                  <div className="mt-4 p-3 bg-muted rounded">AI analysis will appear here when connected.</div>
+                </>
+              ) : (
+                <span>No ticker selected.</span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setInvestigateOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 };

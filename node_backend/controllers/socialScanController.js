@@ -62,8 +62,7 @@ export const reportScan = async (req, res) => {
     res.status(500).json({ error: 'Failed to report scan' });
   }
 };
-import prisma from "../config/prismaClient.js";
-import axios from "axios";
+import prisma from "@prisma/client";
 
 /**
  * @desc Scan a social media post/ad for fraud

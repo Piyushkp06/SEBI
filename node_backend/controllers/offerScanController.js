@@ -21,7 +21,20 @@ export const upload = multer({ storage });
  */
 export const scanInvestmentOffers = async (req, res) => {
   try {
-    const { links, emails, companyName, advisorName, contactInfo, platform, contentType, contentUrl, description, advisorId } = req.body;
+    // Defensive: ensure req.body is always an object
+    const safeBody = req.body && typeof req.body === 'object' ? req.body : {};
+    const {
+      links = null,
+      emails = null,
+      companyName = null,
+      advisorName = null,
+      contactInfo = null,
+      platform = null,
+      contentType = null,
+      contentUrl = null,
+      description = null,
+      advisorId = null
+    } = safeBody;
 
     // Collect file paths for uploaded files
     const uploadedFiles = req.files ? req.files.map((f) => f.path) : [];

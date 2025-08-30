@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import apiClient from '@/lib/api-client';
+import { SCAN_INVESTMENT_OFFERS_ROUTE } from '@/utils/constants';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -18,27 +20,40 @@ const SuspiciousOffers = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [offerText, setOfferText] = useState('');
+  const [advisorName, setAdvisorName] = useState('');
+  const [contactInfo, setContactInfo] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
 
   const handleAnalyze = async () => {
     setIsAnalyzing(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      const mockResult = {
-        advisorStatus: Math.random() > 0.5 ? 'registered' : 'unregistered',
-        riskScore: Math.floor(Math.random() * 100),
-        riskKeywords: ['guaranteed returns', 'no risk', 'exclusive opportunity'],
-        sebiRegistration: Math.random() > 0.5 ? 'SEBI/RIA/INV000123456' : null,
-        overallRisk: Math.random() > 0.6 ? 'high' : Math.random() > 0.3 ? 'medium' : 'low',
-        recommendations: [
-          'Verify advisor credentials independently',
-          'Be cautious of guaranteed return promises',
-          'Check SEBI registration database'
-        ]
-      };
-      setAnalysisResult(mockResult);
+    setAnalysisResult(null);
+    setFileError(null);
+    if (selectedFile && selectedFile.size > 10 * 1024 * 1024) {
+      setFileError('File size exceeds 10MB limit.');
       setIsAnalyzing(false);
-    }, 3000);
+      return;
+    }
+    try {
+      const formData = new FormData();
+      formData.append('offerText', offerText);
+      formData.append('advisorName', advisorName);
+      formData.append('contactInfo', contactInfo);
+      if (selectedFile) {
+        formData.append('file', selectedFile);
+      }
+      const { data } = await apiClient.post(`/${SCAN_INVESTMENT_OFFERS_ROUTE}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setAnalysisResult(data);
+    } catch (err) {
+      let msg = 'Failed to analyze offer. Please try again.';
+      if (err.response && err.response.data && err.response.data.error) {
+        msg = err.response.data.error;
+      }
+      setAnalysisResult({ error: msg });
+    }
+    setIsAnalyzing(false);
   };
 
   const getRiskColor = (risk: string) => {
@@ -125,9 +140,32 @@ const SuspiciousOffers = () => {
                     <p className="text-xs text-muted-foreground">
                       Supports PDF, DOCX, TXT files up to 10MB
                     </p>
-                    <Button variant="outline" className="mt-4">
-                      Choose Files
-                    </Button>
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx,.txt"
+                      style={{ display: 'none' }}
+                      id="offer-file-upload"
+                      onChange={e => {
+                        setFileError(null);
+                        if (e.target.files && e.target.files[0]) {
+                          const file = e.target.files[0];
+                          if (file.size > 10 * 1024 * 1024) {
+                            setFileError('File size exceeds 10MB limit.');
+                            setSelectedFile(null);
+                          } else {
+                            setSelectedFile(file);
+                          }
+                        }
+                      }}
+                    />
+                    <label htmlFor="offer-file-upload">
+                      <Button asChild variant="outline" className="mt-4 cursor-pointer">
+                        <span>{selectedFile ? selectedFile.name : 'Choose File'}</span>
+                      </Button>
+                    </label>
+                    {fileError && (
+                      <div className="text-destructive text-xs mt-2">{fileError}</div>
+                    )}
                   </div>
                 </div>
 
@@ -138,6 +176,8 @@ const SuspiciousOffers = () => {
                     <Input
                       id="advisor-name"
                       placeholder="Enter advisor or company name"
+                      value={advisorName}
+                      onChange={e => setAdvisorName(e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
@@ -145,6 +185,8 @@ const SuspiciousOffers = () => {
                     <Input
                       id="contact-info"
                       placeholder="Phone, email, or website"
+                      value={contactInfo}
+                      onChange={e => setContactInfo(e.target.value)}
                     />
                   </div>
                 </div>
@@ -169,13 +211,16 @@ const SuspiciousOffers = () => {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                  {analysisResult.error && (
+                    <div className="text-destructive font-semibold mb-4">{analysisResult.error}</div>
+                  )}
                   {/* Risk Assessment */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <Card>
                       <CardContent className="p-4 text-center">
                         <div className="text-2xl font-bold mb-2">
                           <Badge variant={getRiskColor(analysisResult.overallRisk) as any} className="text-lg px-3 py-1">
-                            {analysisResult.overallRisk.toUpperCase()} RISK
+                            {(analysisResult.overallRisk ? analysisResult.overallRisk.toUpperCase() : "UNKNOWN")} RISK
                           </Badge>
                         </div>
                         <p className="text-sm text-muted-foreground">Overall Risk Level</p>
@@ -221,11 +266,15 @@ const SuspiciousOffers = () => {
                   <div>
                     <h4 className="font-semibold mb-2">Detected Risk Keywords</h4>
                     <div className="flex flex-wrap gap-2">
-                      {analysisResult.riskKeywords.map((keyword: string, index: number) => (
-                        <Badge key={index} variant="destructive">
-                          {keyword}
-                        </Badge>
-                      ))}
+                      {Array.isArray(analysisResult.riskKeywords) && analysisResult.riskKeywords.length > 0 ? (
+                        analysisResult.riskKeywords.map((keyword: string, index: number) => (
+                          <Badge key={index} variant="destructive">
+                            {keyword}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-xs text-muted-foreground">None detected</span>
+                      )}
                     </div>
                   </div>
 
@@ -233,12 +282,16 @@ const SuspiciousOffers = () => {
                   <div>
                     <h4 className="font-semibold mb-2">Recommendations</h4>
                     <ul className="space-y-2">
-                      {analysisResult.recommendations.map((rec: string, index: number) => (
-                        <li key={index} className="flex items-start space-x-2">
-                          <ExclamationTriangleIcon className="h-4 w-4 text-warning mt-0.5 flex-shrink-0" />
-                          <span className="text-sm text-muted-foreground">{rec}</span>
-                        </li>
-                      ))}
+                      {Array.isArray(analysisResult.recommendations) && analysisResult.recommendations.length > 0 ? (
+                        analysisResult.recommendations.map((rec: string, index: number) => (
+                          <li key={index} className="flex items-start space-x-2">
+                            <ExclamationTriangleIcon className="h-4 w-4 text-warning mt-0.5 flex-shrink-0" />
+                            <span className="text-sm text-muted-foreground">{rec}</span>
+                          </li>
+                        ))
+                      ) : (
+                        <li className="text-xs text-muted-foreground">No recommendations available</li>
+                      )}
                     </ul>
                   </div>
                 </CardContent>

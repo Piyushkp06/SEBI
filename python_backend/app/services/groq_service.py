@@ -5,6 +5,7 @@ from typing import Dict, Any
 from dotenv import load_dotenv
 import os
 from pathlib import Path
+from .sebi_live_verification import SEBILiveVerificationService
 
 # Load .env once globally
 env_path = Path(__file__).parent / '.env'
@@ -23,6 +24,9 @@ class GroqService:
             base_url="https://api.groq.com/v1"
         )
         self.model = "mixtral-8x7b-32768"
+        
+        # Initialize SEBI live verification service
+        self.sebi_service = SEBILiveVerificationService()
 
 
     async def analyze_investment_offer(self, text: str) -> Dict[str, Any]:
@@ -111,17 +115,52 @@ class GroqService:
 
     async def verify_advisor(self, advisor_data: Dict[str, str]) -> Dict[str, Any]:
         """
-        Verify advisor credentials using Groq API
+        Verify advisor credentials using live SEBI verification and AI analysis
         """
-        system_prompt = """You are a SEBI database expert. Analyze the given advisor details and determine if they appear legitimate.
-        Respond with a JSON object containing verification status and details."""
+        # First check against SEBI website live
+        sebi_result = self.sebi_service.verify_advisor_on_sebi_website(advisor_data)
+        
+        # If found on SEBI website, return that result with high confidence
+        if sebi_result["status"] in ["found_on_sebi", "verified"]:
+            return sebi_result
+        
+        # If marked as suspicious by fraud pattern detection, return immediately
+        if sebi_result["status"] == "suspicious":
+            return sebi_result
+        
+        # If not found on SEBI website, use AI analysis as backup
+        system_prompt = """You are a SEBI compliance expert. Analyze the given advisor details for potential red flags.
+        Since this advisor was not found on the official SEBI website, provide risk assessment and recommendations.
+        
+        Return a JSON object with:
+        {
+            "status": "unverified/suspicious/potential_fraud",
+            "isRegistered": false,
+            "registrationStatus": "not_found",
+            "riskLevel": "high/medium/low", 
+            "warnings": ["list of warning messages"],
+            "recommendations": ["list of recommendations"],
+            "details": {
+                "analysis": "detailed analysis of the advisor information",
+                "red_flags": ["list of identified red flags"],
+                "missing_info": ["list of missing critical information"]
+            },
+            "verification_method": "ai_analysis_with_live_sebi_check"
+        }"""
         
         analysis_prompt = f"""
-        Check these advisor credentials:
-        Name: {advisor_data['name']}
-        License ID: {advisor_data['licenseId']}
-        Regulator: {advisor_data['regulator']}
-        User ID: {advisor_data['userId']}
+        Analyze these advisor credentials that were NOT FOUND on official SEBI website:
+        Name: {advisor_data.get('name', 'Not provided')}
+        License ID: {advisor_data.get('licenseId', 'Not provided')}
+        Registration Number: {advisor_data.get('registrationNumber', 'Not provided')}
+        Company: {advisor_data.get('companyName', 'Not provided')}
+        Contact: {advisor_data.get('contactInfo', 'Not provided')}
+        
+        Check for:
+        - Missing SEBI registration (major red flag)
+        - Incomplete or suspicious information
+        - Common fraud patterns
+        - Recommendations for investor protection
         """
         
         try:
@@ -135,11 +174,17 @@ class GroqService:
                 max_tokens=1000,
             )
             
-            return json.loads(completion.choices[0].message.content)
+            ai_result = json.loads(completion.choices[0].message.content)
+            
+            # Combine SEBI result with AI analysis
+            combined_result = sebi_result.copy()
+            combined_result.update(ai_result)
+            combined_result["sebi_check"] = "not_found"
+            combined_result["ai_analysis"] = ai_result.get("details", {})
+            
+            return combined_result
+            
         except Exception as e:
-            return {
-                "status": "error",
-                "message": f"Error checking advisor credentials: {str(e)}",
-                "isRegistered": False,
-                "details": None
-            }
+            # Return SEBI result with error info
+            sebi_result["ai_analysis_error"] = str(e)
+            return sebi_result

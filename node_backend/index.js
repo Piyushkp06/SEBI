@@ -9,7 +9,7 @@ dotenv.config();
 
 const app = express();
 app.use(cors({
-	origin: 'http://localhost:8080', // Change to your frontend URL in production
+	origin: 'http://localhost:8080', // Frontend URL
 	methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 	allowedHeaders: ['Content-Type', 'Authorization'],
 	credentials: true
@@ -23,5 +23,5 @@ app.use("/api/auth", authRoutes);
 app.use("/api/offer-scan", offerScanRoutes);
 app.use("/api/social-scan", socialScanRoutes);
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

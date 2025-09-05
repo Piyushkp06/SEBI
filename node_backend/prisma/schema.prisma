@@ -50,17 +50,21 @@ enum Role {
 /// INVESTMENT OFFERS
 //
 model InvestmentOffer {
-  id          String     @id @default(uuid())
-  platform    String?
-  contentType ContentType
-  contentUrl  String?
-  description String?
-  flagged     Boolean    @default(false)
-  createdAt   DateTime   @default(now())
+  id               String     @id @default(uuid())
+  platform         String?
+  contentType      ContentType
+  contentUrl       String?
+  description      String?
+  flagged          Boolean    @default(false)
+  createdAt        DateTime   @default(now())
+  aiAnalysis       Json?      // Store complete AI analysis response
+  overallRisk      String?    // high/medium/low
+  riskScore        Int?       // 0-100
+  fraudProbability Int?       // 0-100
 
-  advisorId   String?
-  advisor     Advisor?   @relation(fields: [advisorId], references: [id])
-  flags       OfferFlag[]
+  advisorId        String?
+  advisor          Advisor?   @relation(fields: [advisorId], references: [id])
+  flags            OfferFlag[]
 }
 
 model OfferFlag {

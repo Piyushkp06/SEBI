@@ -4,6 +4,7 @@ import prisma from "../prisma/prismaClient.js";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import FormData from "form-data";
 
 // Setup file storage
 const storage = multer.diskStorage({
@@ -40,30 +41,45 @@ export const scanInvestmentOffers = async (req, res) => {
     const uploadedFiles = req.files ? req.files.map((f) => f.path) : [];
 
     // Build payload for Python backend
-    const payload = {
-      textData: {
-        links,
-        emails,
-        companyName,
-        advisorName,
-        contactInfo,
-      },
-    };
+    const formData = new FormData();
+    
+    // Add text data
+    formData.append('textData', JSON.stringify({
+      links,
+      emails,
+      companyName,
+      advisorName,
+      contactInfo
+    }));
 
-    // Send JSON first
-    const aiResponse = await axios.post("http://localhost:5000/analyze-offer", payload);
-
-    // Then upload files one by one if needed
-    for (const filePath of uploadedFiles) {
-      const formData = new FormData();
-      formData.append("file", fs.createReadStream(filePath));
-
-      await axios.post("http://localhost:5000/upload-media", formData, {
-        headers: formData.getHeaders(),
-      });
+    // Add content type
+    formData.append('contentType', contentType || 'text');
+    
+    // Add files if any
+    if (uploadedFiles.length > 0) {
+      for (const filePath of uploadedFiles) {
+        const fileStream = fs.createReadStream(filePath);
+        formData.append('files', fileStream, {
+          filename: path.basename(filePath)
+        });
+      }
     }
 
-    // Save offer details in InvestmentOffer
+    // Send to Python backend (FastAPI)
+    const aiResponse = await axios.post(
+      "http://localhost:5000/api/v1/offers/analyze",
+      formData,
+      {
+        headers: {
+          ...formData.getHeaders(),
+          'Accept': 'application/json',
+        },
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity
+      }
+    );
+
+    // Save offer details and AI analysis in InvestmentOffer
     const offer = await prisma.investmentOffer.create({
       data: {
         platform,
@@ -71,8 +87,12 @@ export const scanInvestmentOffers = async (req, res) => {
         contentUrl,
         description,
         advisorId,
-        // You can add more fields as needed
-        // Optionally, store analysis result as JSON if you add a field for it
+        aiAnalysis: aiResponse.data,
+        overallRisk: aiResponse.data.overallRisk,
+        riskScore: aiResponse.data.riskScore,
+        fraudProbability: aiResponse.data.fraudProbability,
+        // If risk is high, automatically flag the offer
+        flagged: aiResponse.data.overallRisk === 'high'
       },
     });
 
@@ -95,10 +115,24 @@ export const scanInvestmentOffers = async (req, res) => {
 export const checkAdvisorCredentials = async (req, res) => {
   try {
     const { userId, licenseId, regulator, name } = req.body;
-    // Build payload for Python backend
-    const payload = { userId, licenseId, regulator, name };
-    // Call Python backend
-    const response = await axios.post("http://localhost:5000/check-advisor", payload);
+    
+    // Call Python backend with form data
+    const formData = new FormData();
+    formData.append('userId', userId);
+    formData.append('licenseId', licenseId);
+    formData.append('regulator', regulator);
+    formData.append('name', name);
+    
+    const response = await axios.post(
+      "http://localhost:5000/api/v1/advisors/verify",
+      formData,
+      {
+        headers: {
+          ...formData.getHeaders(),
+          'Accept': 'application/json'
+        }
+      }
+    );
     res.status(200).json({
       message: "Advisor credentials checked successfully",
       result: response.data,
